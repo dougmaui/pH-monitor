@@ -19,3 +19,8 @@ boot_out.txt
 # Test files
 *_test.py
 test_*.py
+
+# Credentials and secrets
+settings.toml
+secrets.py
+*.toml
