@@ -1,0 +1,17 @@
+# secrets.py
+CIRCUITPY_WIFI_SSID = "La_Meduse"
+CIRCUITPY_WIFI_PASSWORD = "cassis13"
+CIRCUITPY_IO_USERNAME = "Dougjac"
+CIRCUITPY_IO_KEY = "aio_jaEC069VJQWYelIFm4FrqXE4RjVE"
+TZ_OFFSET = +2
+# Adjust for your timezone offset from UTC
+
+# MQTT Feed Names - Change these to update all feed references
+FEED_PH = "pH2-1"
+FEED_TEMPERATURE = "pH2Temp-2"
+FEED_RSSI = "pH2RSSI-1"
+
+# Optional: Keep old feed names for reference
+# OLD_FEED_PH = "ph"
+# OLD_FEED_TEMPERATURE = "temp_f"
+# OLD_FEED_RSSI = "RSSI"

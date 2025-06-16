@@ -1,0 +1,21 @@
+# CircuitPython specific
+boot_out.txt
+.Trashes
+.DS_Store
+.fseventsd
+.metadata_never_index
+.TemporaryItems
+.Trash-*
+
+# macOS metadata
+._*
+.vscode/
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Test files
+*_test.py
+test_*.py

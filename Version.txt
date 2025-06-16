@@ -1,0 +1,7 @@
+Project: Hot Tub Monitor
+Version: Rev 1.0
+Date: 2025-05-01
+Notes:
+- Initial working version with full MQTT, pH, temp, display, calibration, and watchdog.
+- Includes fixed DS18B20 initialization in `temperature.py`
+- Stable Wi-Fi and NeoPixel status LED via `wifi_utils.py`
