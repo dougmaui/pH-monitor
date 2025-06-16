@@ -24,3 +24,6 @@ test_*.py
 settings.toml
 secrets.py
 *.toml
+# Exception for touchscreen integration test
+simple_touchscreen_test.py
+!simple_touchscreen_test.py
