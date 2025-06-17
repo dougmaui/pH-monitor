@@ -1,5 +1,5 @@
 # code.py - Production version with TFT display, early watchdog, I2C safety, temperature fallback, and Simple NeoPixel
-# Rev 4.2 - SPI cleanup solution for auto-reload issues + expanded timeouts
+# Rev 3.6 - Fixed parameter mismatches for measurement integration
 import time
 import board
 import digitalio
@@ -13,9 +13,9 @@ import os
 
 # Import extracted modules
 from lib.core.neopixel_status import (
-    update_neopixel_status, 
-    print_neopixel_legend, 
-    neopixel_diagnostic_test
+    update_neopixel_status,
+    print_neopixel_legend,
+    neopixel_diagnostic_test,
 )
 from lib.core.system_init import initialize_system_managers
 from lib.core.connection_manager import connect_and_initialize_services
@@ -39,6 +39,7 @@ except Exception as e:
 if watchdog_enabled:
     wdt.feed()
 print("🐕 Watchdog fed before I2C operations")
+
 
 # === I2C RESET FUNCTIONS ===
 def safe_i2c_reset_with_timeout(timeout_seconds=20):  # EXPANDED: was 10s
@@ -87,6 +88,7 @@ def safe_i2c_reset_with_timeout(timeout_seconds=20):  # EXPANDED: was 10s
             microcontroller.reset()
         return False
 
+
 def emergency_i2c_cleanup():
     """Emergency I2C cleanup on errors"""
     try:
@@ -97,6 +99,7 @@ def emergency_i2c_cleanup():
         print("   Emergency cleanup complete")
     except:
         pass  # If this fails, we're already in trouble
+
 
 # Execute protected I2C reset with expanded timeout
 safe_i2c_reset_with_timeout(20)  # EXPANDED: was 10s
@@ -140,6 +143,9 @@ from lib.time_sync.robust_time import TimeManager
 # Import I2C safety wrapper
 from lib.utilities.i2c_safe import I2CSafeWrapper, create_safe_sensor_reader
 
+# Import measurement integration module
+from lib.sensors.measurement_integration import create_measurement_manager
+
 # Feed watchdog after imports
 if watchdog_enabled:
     wdt.feed()
@@ -148,6 +154,7 @@ print("🐕 Watchdog fed after imports")
 # === Setup NeoPixel for status ===
 pixel = neopixel.NeoPixel(board.NEOPIXEL, 1, brightness=0.2)
 pixel[0] = (0, 0, 0)
+
 
 def check_temperature_health_and_reset():
     """Check temperature sensor health and reset system if persistently failed"""
@@ -165,7 +172,9 @@ def check_temperature_health_and_reset():
         print("🔄 Resetting microcontroller in 5 seconds...")
         time.sleep(5)
         import microcontroller
+
         microcontroller.reset()
+
 
 # === Setup I2C and SPI buses ===
 print("🔌 Setting up I2C bus...")
@@ -184,7 +193,7 @@ try:
     if hasattr(board, "SPI"):
         board.SPI().deinit()
         print("   Cleaned up existing SPI bus")
-    time.sleep(0.5)  # Brief delay to let hardware settle
+        time.sleep(0.5)  # Brief delay to let hardware settle
 except Exception as e:
     print(f"   SPI cleanup note: {e}")
 
@@ -225,6 +234,7 @@ NOMINAL_HOT_TUB_TEMP_C = (
     (NOMINAL_HOT_TUB_TEMP_F - 32.0) * 5.0 / 9.0
 )  # Convert to Celsius
 
+
 def safe_read_temperature():
     """Safely read temperature with RTD priority, then fallback"""
     # Try RTD first if it exists and is working
@@ -242,7 +252,7 @@ def safe_read_temperature():
                 return rtd_reading, "rtd"
         except Exception as e:
             print(f"   ⚠️ RTD read error: {e}")
-    
+
     # Try OneWire temperature as backup
     try:
         temp_c = temperature.read_temperature()
@@ -254,32 +264,51 @@ def safe_read_temperature():
     except Exception as e:
         return NOMINAL_HOT_TUB_TEMP_C, "nominal"
 
+
 # === Initialize all system components ===
 managers = initialize_system_managers(
-    watchdog_enabled, wdt, i2c, spi, pixel,
-    WIFI_SSID, WIFI_PASSWORD, IO_USERNAME, IO_KEY, TZ_OFFSET
+    watchdog_enabled,
+    wdt,
+    i2c,
+    spi,
+    pixel,
+    WIFI_SSID,
+    WIFI_PASSWORD,
+    IO_USERNAME,
+    IO_KEY,
+    TZ_OFFSET,
 )
 
 # Unpack managers for easier access
-state_manager = managers['state_manager']
-i2c_safe = managers['i2c_safe'] 
-ph_sensor = managers['ph_sensor']
-rtd_sensor = managers['rtd_sensor']
-display = managers['display']
-ph_label = managers['ph_label']
-temp_c_label = managers['temp_c_label']
-temp_f_label = managers['temp_f_label']
-rssi_label = managers['rssi_label']
-time_label = managers['time_label']
-safe_read_ph = managers['safe_read_ph']
-wifi_manager = managers['wifi_manager']
-time_manager = managers['time_manager']
-mqtt_manager = managers['mqtt_manager']
+state_manager = managers["state_manager"]
+i2c_safe = managers["i2c_safe"]
+ph_sensor = managers["ph_sensor"]
+rtd_sensor = managers["rtd_sensor"]
+display = managers["display"]
+ph_label = managers["ph_label"]
+temp_c_label = managers["temp_c_label"]
+temp_f_label = managers["temp_f_label"]
+rssi_label = managers["rssi_label"]
+time_label = managers["time_label"]
+safe_read_ph = managers["safe_read_ph"]
+wifi_manager = managers["wifi_manager"]
+time_manager = managers["time_manager"]
+mqtt_manager = managers["mqtt_manager"]
+# measurement_manager = managers['measurement_manager']  # TODO: Add to system_init.py
+measurement_manager = None  # Temporary placeholder
 
 # === Connect and initialize all services ===
-connect_and_initialize_services(wifi_manager, time_manager, mqtt_manager, 
-                               ph_sensor, safe_read_ph, watchdog_enabled, wdt,
-                               safe_read_temperature, pixel)
+connect_and_initialize_services(
+    wifi_manager,
+    time_manager,
+    mqtt_manager,
+    ph_sensor,
+    safe_read_ph,
+    watchdog_enabled,
+    wdt,
+    safe_read_temperature,
+    pixel,
+)
 
 # Print status reports
 print("System state:", state_manager.get_status())
@@ -287,6 +316,10 @@ print("WiFi status:", wifi_manager.get_status())
 print("Time status:", time_manager.get_status())
 print("MQTT status:", mqtt_manager.get_status())
 print("I2C stats:", i2c_safe.get_stats())
+if measurement_manager:
+    print("Measurement manager stats:", measurement_manager.get_statistics())
+else:
+    print("Measurement manager: Not initialized")
 print("=" * 60)
 
 # === Force system to operational state ===
@@ -308,7 +341,7 @@ i2c_health_check_interval = 30  # Check I2C health every 30 seconds
 main_loop_iterations = 0
 last_neopixel_status = None  # Track NeoPixel status changes
 
-print("🚀 Starting main monitoring loop with expanded timeouts for WiFi stability...")
+print("🚀 Starting main monitoring loop with robust measurements...")
 
 try:
     while state_manager.should_continue():
@@ -329,35 +362,61 @@ try:
             if i2c_safe.check_i2c_health():
                 state_manager.update_component_health("i2c", "healthy")
             else:
-                state_manager.update_component_health("i2c", "degraded", "Health check failed")
+                state_manager.update_component_health(
+                    "i2c", "degraded", "Health check failed"
+                )
 
         # === Sensor readings (every 2 seconds) ===
         if now - loop_start >= sensor_interval:
             loop_start = now
-            
-            # Run the extracted sensor cycle function
+
+            # Run the extracted sensor cycle function (FIXED: removed measurement_manager parameter)
             temp_c, temp_f, ph, rssi, temp_source = run_sensor_cycle(
-                state_manager, time_manager, wifi_manager, mqtt_manager,
-                ph_sensor, safe_read_ph, pixel, display, ph_label, temp_c_label,
-                temp_f_label, rssi_label, time_label, main_loop_iterations,
-                safe_read_temperature, NOMINAL_HOT_TUB_TEMP_C, NOMINAL_HOT_TUB_TEMP_F
+                state_manager,
+                time_manager,
+                wifi_manager,
+                mqtt_manager,
+                ph_sensor,
+                safe_read_ph,
+                pixel,
+                display,
+                ph_label,
+                temp_c_label,
+                temp_f_label,
+                rssi_label,
+                time_label,
+                main_loop_iterations,
+                safe_read_temperature,
+                NOMINAL_HOT_TUB_TEMP_C,
+                NOMINAL_HOT_TUB_TEMP_F,
             )
 
             # Show I2C stats
             i2c_stats = i2c_safe.get_stats()
             if i2c_stats["total_operations"] > 0:
-                print(f"   🛡️ I2C: {i2c_stats['success_rate']}% success, {i2c_stats['timeouts']} timeouts, {i2c_stats['resets']} resets")
+                print(
+                    f"   🛡️ I2C: {i2c_stats['success_rate']}% success, {i2c_stats['timeouts']} timeouts, {i2c_stats['resets']} resets"
+                )
 
             print("-" * 50)
 
         # === Detailed status report (every minute) ===
         if now - last_status_report >= status_report_interval:
             last_status_report = now
-            
-            # Run the extracted detailed status report function
-            run_detailed_status_report(main_loop_iterations, state_manager, wifi_manager,
-                                     time_manager, mqtt_manager, i2c_safe, rtd_sensor,
-                                     watchdog_enabled, wdt, last_neopixel_status)
+
+            # Run the extracted detailed status report function (FIXED: removed measurement_manager parameter)
+            run_detailed_status_report(
+                main_loop_iterations,
+                state_manager,
+                wifi_manager,
+                time_manager,
+                mqtt_manager,
+                i2c_safe,
+                rtd_sensor,
+                watchdog_enabled,
+                wdt,
+                last_neopixel_status,
+            )
 
         time.sleep(0.01)
 
@@ -367,6 +426,7 @@ except KeyboardInterrupt:
 except Exception as e:
     print(f"\n💥 Fatal error: {e}")
     import traceback
+
     traceback.print_exception(e)
 
     # Emergency cleanup
@@ -382,6 +442,9 @@ except Exception as e:
             "i2c-success-rate": i2c_stats["success_rate"],
             "i2c-resets": i2c_stats["resets"],
         }
+        if measurement_manager:
+            measurement_stats = measurement_manager.get_statistics()
+            error_data["measurement-robust-enabled"] = measurement_stats["enabled"]
         mqtt_manager.send_readings(error_data)
     except:
         pass
@@ -402,5 +465,7 @@ finally:
     print("✅ System shutdown complete")
     print(f"📊 Total monitoring cycles: {main_loop_iterations}")
     print(f"🛡️ Final I2C stats: {i2c_safe.get_stats()}")
+    if measurement_manager:
+        print(f"📊 Final measurement stats: {measurement_manager.get_statistics()}")
     if watchdog_enabled:
         print(f"🐕 Watchdog was active throughout execution")
