@@ -12,14 +12,26 @@ from lib.time_sync.robust_time import TimeManager
 from lib.utilities.i2c_safe import I2CSafeWrapper, create_safe_sensor_reader
 from lib.sensors.ph_sensor import AtlasScientificPH
 from lib.sensors.rtd_sensor import RTDSensor
+from lib.sensors.measurement_integration import create_measurement_manager
 from lib.oled_display.oled_display import (
     initialize_display,
     create_display_group,
 )
 
 
-def initialize_system_managers(watchdog_enabled, wdt, i2c, spi, pixel, 
-                              wifi_ssid, wifi_password, io_username, io_key, tz_offset):
+def initialize_system_managers(
+    watchdog_enabled,
+    wdt,
+    i2c,
+    spi,
+    pixel,
+    wifi_ssid,
+    wifi_password,
+    io_username,
+    io_key,
+    tz_offset,
+    safe_read_temperature,
+):
     """Initialize all system managers and components"""
     print("🔧 Initializing robust system management...")
     if watchdog_enabled:
@@ -90,6 +102,15 @@ def initialize_system_managers(watchdog_enabled, wdt, i2c, spi, pixel,
     # Create safe sensor reading functions
     safe_read_ph = create_safe_sensor_reader(i2c_safe, ph_sensor, "read_ph")
 
+    # Initialize measurement manager
+    print("📊 Initializing measurement integration...")
+    measurement_manager = create_measurement_manager(
+        state_manager, safe_read_temperature, safe_read_ph
+    )
+
+    # Initialize robust measurements
+    measurement_manager.initialize_robust_measurements(ph_sensor, i2c_safe)
+
     if watchdog_enabled:
         wdt.feed()
 
@@ -114,18 +135,19 @@ def initialize_system_managers(watchdog_enabled, wdt, i2c, spi, pixel,
         wdt.feed()
 
     return {
-        'state_manager': state_manager,
-        'i2c_safe': i2c_safe,
-        'ph_sensor': ph_sensor,
-        'rtd_sensor': rtd_sensor,
-        'display': display,
-        'ph_label': ph_label,
-        'temp_c_label': temp_c_label,
-        'temp_f_label': temp_f_label,
-        'rssi_label': rssi_label,
-        'time_label': time_label,
-        'safe_read_ph': safe_read_ph,
-        'wifi_manager': wifi_manager,
-        'time_manager': time_manager,
-        'mqtt_manager': mqtt_manager
+        "state_manager": state_manager,
+        "i2c_safe": i2c_safe,
+        "ph_sensor": ph_sensor,
+        "rtd_sensor": rtd_sensor,
+        "display": display,
+        "ph_label": ph_label,
+        "temp_c_label": temp_c_label,
+        "temp_f_label": temp_f_label,
+        "rssi_label": rssi_label,
+        "time_label": time_label,
+        "safe_read_ph": safe_read_ph,
+        "wifi_manager": wifi_manager,
+        "time_manager": time_manager,
+        "mqtt_manager": mqtt_manager,
+        "measurement_manager": measurement_manager,
     }

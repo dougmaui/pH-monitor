@@ -1,5 +1,5 @@
-# code.py - Production version with TFT display, early watchdog, I2C safety, temperature fallback, and Simple NeoPixel
-# Rev 3.6 - Fixed parameter mismatches for measurement integration
+# code.py - Production version with TFT display, early watchdog, I2C safety, temperature fallback, and Robust Measurements
+# Rev 3.7 - Full robust measurement system integration
 import time
 import board
 import digitalio
@@ -277,6 +277,7 @@ managers = initialize_system_managers(
     IO_USERNAME,
     IO_KEY,
     TZ_OFFSET,
+    safe_read_temperature,
 )
 
 # Unpack managers for easier access
@@ -294,8 +295,7 @@ safe_read_ph = managers["safe_read_ph"]
 wifi_manager = managers["wifi_manager"]
 time_manager = managers["time_manager"]
 mqtt_manager = managers["mqtt_manager"]
-# measurement_manager = managers['measurement_manager']  # TODO: Add to system_init.py
-measurement_manager = None  # Temporary placeholder
+measurement_manager = managers["measurement_manager"]
 
 # === Connect and initialize all services ===
 connect_and_initialize_services(
@@ -316,10 +316,7 @@ print("WiFi status:", wifi_manager.get_status())
 print("Time status:", time_manager.get_status())
 print("MQTT status:", mqtt_manager.get_status())
 print("I2C stats:", i2c_safe.get_stats())
-if measurement_manager:
-    print("Measurement manager stats:", measurement_manager.get_statistics())
-else:
-    print("Measurement manager: Not initialized")
+print("Measurement manager stats:", measurement_manager.get_statistics())
 print("=" * 60)
 
 # === Force system to operational state ===
@@ -370,7 +367,7 @@ try:
         if now - loop_start >= sensor_interval:
             loop_start = now
 
-            # Run the extracted sensor cycle function (FIXED: removed measurement_manager parameter)
+            # Run the extracted sensor cycle function with measurement manager
             temp_c, temp_f, ph, rssi, temp_source = run_sensor_cycle(
                 state_manager,
                 time_manager,
@@ -389,6 +386,7 @@ try:
                 safe_read_temperature,
                 NOMINAL_HOT_TUB_TEMP_C,
                 NOMINAL_HOT_TUB_TEMP_F,
+                measurement_manager,
             )
 
             # Show I2C stats
@@ -404,7 +402,7 @@ try:
         if now - last_status_report >= status_report_interval:
             last_status_report = now
 
-            # Run the extracted detailed status report function (FIXED: removed measurement_manager parameter)
+            # Run the extracted detailed status report function with measurement manager
             run_detailed_status_report(
                 main_loop_iterations,
                 state_manager,
@@ -416,6 +414,7 @@ try:
                 watchdog_enabled,
                 wdt,
                 last_neopixel_status,
+                measurement_manager,
             )
 
         time.sleep(0.01)

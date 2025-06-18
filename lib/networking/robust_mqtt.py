@@ -3,7 +3,7 @@
 Robust MQTT Manager for ESP32-S3
 Handles connections, queuing, reconnections, and data publishing
 Memory optimized for CircuitPython
-FIXED: Immediate connection attempts and faster reconnection
+ULTRA-MINIMAL: Error 32 detection only, no emergency publishing
 """
 import time
 import wifi
@@ -12,7 +12,7 @@ import os
 
 # Import feed names from settings.toml
 FEED_PH = os.getenv("FEED_PH", "pH2-1")
-FEED_TEMPERATURE = os.getenv("FEED_TEMPERATURE", "pH2Temp-2") 
+FEED_TEMPERATURE = os.getenv("FEED_TEMPERATURE", "pH2Temp-2")
 FEED_RSSI = os.getenv("FEED_RSSI", "pH2RSSI-1")
 
 
@@ -49,6 +49,9 @@ class MQTTManager:
         self.messages_sent = 0
         self.messages_queued = 0
         self.messages_dropped = 0
+
+        # ULTRA-MINIMAL ADDITION: Simple Error 32 counter only
+        self.error_32_count = 0
 
         # Register with state manager
         state_manager.register_component("mqtt")
@@ -170,12 +173,11 @@ class MQTTManager:
         """Send system status information"""
         status_readings = {
             "system-state": system_status.get("state", "UNKNOWN"),
-            "meta-dot-timestamp": self._get_time_string(),
         }
         return self.send_readings(status_readings)
 
     def _send_message(self, message):
-        """Attempt to send a single message"""
+        """Attempt to send a single message with ultra-minimal Error 32 detection"""
         current_time = time.monotonic()
 
         # Rate limiting (more permissive)
@@ -198,6 +200,17 @@ class MQTTManager:
             return True
 
         except Exception as e:
+            error_str = str(e)
+
+            # ULTRA-MINIMAL: Just detect Error 32 and report to WiFi manager
+            if "32" in error_str:
+                self.error_32_count += 1
+                print(f"🚨 MQTT Error 32 detected (count: {self.error_32_count})")
+
+                # Report to WiFi manager for correlation analysis
+                if hasattr(self.wifi_manager, "report_mqtt_error"):
+                    self.wifi_manager.report_mqtt_error("error_32")
+
             print(f"❌ MQTT send error: {e}")
             # Mark client as disconnected on send failure
             self.client = None
@@ -280,15 +293,6 @@ class MQTTManager:
         if self.is_connected() and self.message_queue:
             self._process_queue()
 
-    def _get_time_string(self):
-        """Get current time string for timestamps"""
-        try:
-            from lib.time_sync.time_sync import get_local_time_string
-
-            return get_local_time_string()
-        except:
-            return "unknown"
-
     def get_status(self):
         """Get comprehensive MQTT status"""
         queue_age = 0
@@ -318,6 +322,7 @@ class MQTTManager:
                 self.reconnect_interval
                 - (time.monotonic() - self.last_connection_attempt),
             ),
+            "error_32_count": self.error_32_count,  # ULTRA-MINIMAL ADDITION
         }
 
     def disconnect(self):

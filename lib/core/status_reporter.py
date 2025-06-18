@@ -1,15 +1,25 @@
 # lib/core/status_reporter.py
 """
-System Status Reporting Module
-Handles detailed system status reports and monitoring
+Status Reporter Module
+Handles detailed system status reporting with measurement statistics
 Extracted from main code.py for better organization
 """
 import time
 
 
-def run_detailed_status_report(main_loop_iterations, state_manager, wifi_manager, 
-                              time_manager, mqtt_manager, i2c_safe, rtd_sensor, 
-                              watchdog_enabled, wdt, last_neopixel_status):
+def run_detailed_status_report(
+    main_loop_iterations,
+    state_manager,
+    wifi_manager,
+    time_manager,
+    mqtt_manager,
+    i2c_safe,
+    rtd_sensor,
+    watchdog_enabled,
+    wdt,
+    last_neopixel_status,
+    measurement_manager,
+):
     """Run the detailed system status report (every minute)"""
     print(f"\n🔍 DETAILED SYSTEM REPORT (Cycle #{main_loop_iterations}):")
 
@@ -39,16 +49,59 @@ def run_detailed_status_report(main_loop_iterations, state_manager, wifi_manager
 
     # Time status
     time_status = time_manager.get_status()
-    print(f"   Time: Valid={time_status['time_valid']}, Current={time_status['current_time']}")
+    print(
+        f"   Time: Valid={time_status['time_valid']}, Current={time_status['current_time']}"
+    )
 
     # MQTT status
     mqtt_status = mqtt_manager.get_status()
-    print(f"   MQTT: Connected={mqtt_status['connected']}, Sent={mqtt_status['messages_sent']}, Queued={mqtt_status['messages_queued']}")
+    print(
+        f"   MQTT: Connected={mqtt_status['connected']}, Sent={mqtt_status['messages_sent']}, Queued={mqtt_status['messages_queued']}"
+    )
 
     # I2C safety status
     i2c_stats = i2c_safe.get_stats()
     print(f"   I2C Safety: {i2c_stats['success_rate']}% success rate")
-    print(f"   I2C Operations: {i2c_stats['total_operations']} total, {i2c_stats['timeouts']} timeouts, {i2c_stats['resets']} resets")
+    print(
+        f"   I2C Operations: {i2c_stats['total_operations']} total, {i2c_stats['timeouts']} timeouts, {i2c_stats['resets']} resets"
+    )
+
+    # Measurement manager status
+    if measurement_manager:
+        try:
+            measurement_stats = measurement_manager.get_statistics()
+            print(f"   Measurement Manager:")
+            print(
+                f"     Robust measurements: {'Enabled' if measurement_stats['enabled'] else 'Disabled'}"
+            )
+            print(
+                f"     Temperature readings: {measurement_stats['temp_readings']} total"
+            )
+            print(
+                f"     Temperature robust success: {measurement_stats['temp_robust_success_rate']}%"
+            )
+            print(f"     pH readings: {measurement_stats['ph_readings']} total")
+            print(
+                f"     pH robust success: {measurement_stats['ph_robust_success_rate']}%"
+            )
+            print(
+                f"     Sample config: T={measurement_stats['temp_sample_count']}, pH={measurement_stats['ph_sample_count']}, delay={measurement_stats['sample_delay']}s"
+            )
+
+            # Show noise reduction if available
+            if "temp_noise_reduction" in measurement_stats:
+                print(
+                    f"     Temperature noise reduction: {measurement_stats['temp_noise_reduction']:.4f}°C avg"
+                )
+            if "ph_noise_reduction" in measurement_stats:
+                print(
+                    f"     pH noise reduction: {measurement_stats['ph_noise_reduction']:.4f} pH avg"
+                )
+
+        except Exception as e:
+            print(f"   Measurement Manager: Error getting stats - {e}")
+    else:
+        print(f"   Measurement Manager: Not initialized")
 
     # NeoPixel status
     print(f"   NeoPixel Status: {last_neopixel_status}")
@@ -69,11 +122,37 @@ def run_detailed_status_report(main_loop_iterations, state_manager, wifi_manager
     else:
         print(f"   Watchdog: Disabled")
 
-    # Recent readings
+    # Recent readings with quality metrics
     if state_manager.readings:
         print("   Recent Readings:")
         for sensor, reading in state_manager.readings.items():
             age = time.monotonic() - reading["time"]
-            print(f"     {sensor}: {reading['value']} (age: {age:.0f}s)")
+            value = reading["value"]
+
+            # Add quality indicators for measurements
+            if sensor == "temperature" and measurement_manager:
+                try:
+                    temp_std_dev = state_manager.get_reading("temp_std_dev")
+                    if temp_std_dev:
+                        print(
+                            f"     {sensor}: {value} (±{temp_std_dev:.3f}°C, age: {age:.0f}s)"
+                        )
+                    else:
+                        print(f"     {sensor}: {value} (age: {age:.0f}s)")
+                except:
+                    print(f"     {sensor}: {value} (age: {age:.0f}s)")
+            elif sensor == "ph" and measurement_manager:
+                try:
+                    ph_std_dev = state_manager.get_reading("ph_std_dev")
+                    if ph_std_dev:
+                        print(
+                            f"     {sensor}: {value} (±{ph_std_dev:.3f} pH, age: {age:.0f}s)"
+                        )
+                    else:
+                        print(f"     {sensor}: {value} (age: {age:.0f}s)")
+                except:
+                    print(f"     {sensor}: {value} (age: {age:.0f}s)")
+            else:
+                print(f"     {sensor}: {value} (age: {age:.0f}s)")
 
     print("=" * 60)
