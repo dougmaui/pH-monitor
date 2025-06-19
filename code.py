@@ -1,5 +1,5 @@
 # code.py - Production version with TFT display, early watchdog, I2C safety, temperature fallback, and Robust Measurements
-# Rev 3.7 - Full robust measurement system integration
+# Rev 3.8 - Cleaned up OneWire dependencies, RTD-only temperature system
 import time
 import board
 import digitalio
@@ -10,6 +10,10 @@ import microcontroller
 import busio
 import watchdog
 import os
+
+import supervisor
+
+supervisor.runtime.autoreload = False
 
 # Import extracted modules
 from lib.core.neopixel_status import (
@@ -119,16 +123,8 @@ if watchdog_enabled:
     wdt.feed()
 
 from lib.config.settings import WIFI_SSID, WIFI_PASSWORD, IO_USERNAME, IO_KEY
-from lib.sensors import temperature
 from lib.sensors.ph_sensor import AtlasScientificPH
 from lib.sensors.rtd_sensor import RTDSensor
-
-# Import TFT display functions
-from lib.oled_display.oled_display import (
-    initialize_display,
-    create_display_group,
-    update_display,
-)
 
 # Feed watchdog during imports
 if watchdog_enabled:
@@ -154,27 +150,6 @@ print("🐕 Watchdog fed after imports")
 # === Setup NeoPixel for status ===
 pixel = neopixel.NeoPixel(board.NEOPIXEL, 1, brightness=0.2)
 pixel[0] = (0, 0, 0)
-
-
-def check_temperature_health_and_reset():
-    """Check temperature sensor health and reset system if persistently failed"""
-    temp_status = temperature.get_temperature_status()
-    if (
-        temp_status["consecutive_failures"] >= 50
-        and temp_status["time_since_last_success"] is not None
-        and temp_status["time_since_last_success"] > 1800
-    ):
-        print("🚨 TEMPERATURE RESET TRIGGERED:")
-        print(f"   Consecutive failures: {temp_status['consecutive_failures']}")
-        print(
-            f"   Time since last success: {temp_status['time_since_last_success']:.0f}s"
-        )
-        print("🔄 Resetting microcontroller in 5 seconds...")
-        time.sleep(5)
-        import microcontroller
-
-        microcontroller.reset()
-
 
 # === Setup I2C and SPI buses ===
 print("🔌 Setting up I2C bus...")
@@ -229,14 +204,16 @@ if watchdog_enabled:
         print(f"⚠️ Watchdog timeout adjustment failed: {e}")
 
 # === Temperature fallback configuration ===
-NOMINAL_HOT_TUB_TEMP_F = 103.0  # Fallback temperature for pH compensation
+NOMINAL_HOT_TUB_TEMP_F = (
+    104.0  # UPDATED: Clean fallback temperature for pH compensation
+)
 NOMINAL_HOT_TUB_TEMP_C = (
     (NOMINAL_HOT_TUB_TEMP_F - 32.0) * 5.0 / 9.0
 )  # Convert to Celsius
 
 
 def safe_read_temperature():
-    """Safely read temperature with RTD priority, then fallback"""
+    """Safely read temperature with RTD, fallback to nominal (CLEANED: No OneWire)"""
     # Try RTD first if it exists and is working
     if rtd_sensor:
         try:
@@ -253,16 +230,8 @@ def safe_read_temperature():
         except Exception as e:
             print(f"   ⚠️ RTD read error: {e}")
 
-    # Try OneWire temperature as backup
-    try:
-        temp_c = temperature.read_temperature()
-        check_temperature_health_and_reset()
-        if isinstance(temp_c, (int, float)) and temp_c != 85.0:
-            return temp_c, "onewire"
-        else:
-            return NOMINAL_HOT_TUB_TEMP_C, "nominal"
-    except Exception as e:
-        return NOMINAL_HOT_TUB_TEMP_C, "nominal"
+    # Clean fallback to nominal temperature (REMOVED: OneWire complexity)
+    return NOMINAL_HOT_TUB_TEMP_C, "nominal"
 
 
 # === Initialize all system components ===
