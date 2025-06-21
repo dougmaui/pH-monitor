@@ -1,5 +1,5 @@
 # code.py - Production version with TFT display, early watchdog, I2C safety, temperature fallback, and Robust Measurements
-# Rev 3.9 - Added MQTT Heartbeat Monitoring with Auto-Recovery
+# Rev 3.8 - Cleaned up OneWire dependencies, RTD-only temperature system
 import time
 import board
 import digitalio
@@ -363,44 +363,7 @@ i2c_health_check_interval = 30  # Check I2C health every 30 seconds
 main_loop_iterations = 0
 last_neopixel_status = None  # Track NeoPixel status changes
 
-# === MQTT HEARTBEAT MONITORING VARIABLES ===
-mqtt_heartbeat_failure_count = 0
-MQTT_HEARTBEAT_FAILURE_THRESHOLD = 3  # Fail faster for heartbeat tests
-last_heartbeat_time = 0
-HEARTBEAT_INTERVAL = 60  # Test every 60 seconds
-print(f"💓 MQTT heartbeat monitoring enabled - testing every {HEARTBEAT_INTERVAL}s")
-
-
-def mqtt_recovery_escalation():
-    """Escalate through MQTT recovery levels"""
-    print("🔄 MQTT heartbeat failed - starting recovery escalation...")
-
-    # Level 1: Try MQTT force reconnect
-    print("   Level 1: Attempting MQTT reconnection...")
-    if mqtt_manager.force_reconnect():
-        print("   ✅ MQTT reconnection successful")
-        return True
-
-    # Level 2: Try WiFi force reconnect
-    print("   Level 2: Attempting WiFi reconnection...")
-    if wifi_manager.force_reconnect():
-        print("   ✅ WiFi reconnection successful")
-        # Give MQTT a moment to reconnect after WiFi recovery
-        time.sleep(2)
-        if mqtt_manager.force_reconnect():
-            print("   ✅ MQTT reconnected after WiFi recovery")
-            return True
-
-    # Level 3: Full system reset
-    print("   Level 3: All recovery failed - resetting system...")
-    state_manager.add_alert("MQTT heartbeat failed - system reset", "critical")
-    time.sleep(1)
-    microcontroller.reset()
-
-    return False  # Should never reach here
-
-
-print("🚀 Starting main monitoring loop with robust measurements and MQTT heartbeat...")
+print("🚀 Starting main monitoring loop with robust measurements...")
 
 try:
 
@@ -416,56 +379,6 @@ try:
         wifi_manager.check_connection()
         time_manager.update()
         mqtt_manager.update()
-
-        # === MQTT HEARTBEAT TEST (Primary Health Monitor) ===
-        if (
-            now - last_heartbeat_time >= HEARTBEAT_INTERVAL
-            and wifi_manager.is_connected()
-            and time_manager.is_time_valid()
-        ):
-
-            last_heartbeat_time = now
-
-            heartbeat_data = {
-                "mqtt-heartbeat": time_manager.get_timestamp_for_data(),
-                "heartbeat-cycle": main_loop_iterations,
-                "system-uptime": time_manager.get_uptime_string(),
-            }
-
-            try:
-                heartbeat_sent = mqtt_manager.send_readings(heartbeat_data)
-                if heartbeat_sent > 0:
-                    print(
-                        f"   💓 MQTT heartbeat successful (cycle #{main_loop_iterations})"
-                    )
-                    mqtt_heartbeat_failure_count = 0
-                    state_manager.update_component_health("mqtt_heartbeat", "healthy")
-                else:
-                    mqtt_heartbeat_failure_count += 1
-                    print(
-                        f"   ⚠️ MQTT heartbeat queued (failure #{mqtt_heartbeat_failure_count})"
-                    )
-                    state_manager.update_component_health(
-                        "mqtt_heartbeat", "degraded", "Heartbeat queued"
-                    )
-
-            except Exception as e:
-                mqtt_heartbeat_failure_count += 1
-                print(
-                    f"   ❌ MQTT heartbeat error #{mqtt_heartbeat_failure_count}: {e}"
-                )
-                state_manager.update_component_health(
-                    "mqtt_heartbeat", "failed", f"Error: {e}"
-                )
-
-            # Trigger recovery if heartbeat fails repeatedly
-            if mqtt_heartbeat_failure_count >= MQTT_HEARTBEAT_FAILURE_THRESHOLD:
-                print(
-                    f"🚨 MQTT heartbeat failed {MQTT_HEARTBEAT_FAILURE_THRESHOLD} times!"
-                )
-                state_manager.add_alert(f"MQTT heartbeat critical failure", "critical")
-                mqtt_recovery_escalation()
-                mqtt_heartbeat_failure_count = 0  # Reset after recovery attempt
 
         # === I2C health monitoring ===
         if now - last_i2c_health_check >= i2c_health_check_interval:
@@ -515,11 +428,6 @@ try:
         # === Detailed status report (every minute) ===
         if now - last_status_report >= status_report_interval:
             last_status_report = now
-
-            # Add heartbeat status to the detailed report
-            print(
-                f"   💓 MQTT Heartbeat: {mqtt_heartbeat_failure_count} failures, last test {now - last_heartbeat_time:.0f}s ago"
-            )
 
             # Run the extracted detailed status report function with measurement manager
             run_detailed_status_report(
@@ -594,4 +502,3 @@ finally:
         print(f"📊 Final measurement stats: {measurement_manager.get_statistics()}")
     if watchdog_enabled:
         print(f"🐕 Watchdog was active throughout execution")
-    print(f"💓 Final MQTT heartbeat failures: {mqtt_heartbeat_failure_count}")
