@@ -6,24 +6,6 @@ import adafruit_ili9341
 from fourwire import FourWire
 import board
 
-# Try to import nice Raleway fonts from font bundle
-try:
-    from font_raleway_regular_24 import FONT as raleway_24
-    from font_raleway_regular_18 import FONT as raleway_18
-
-    large_font = raleway_24
-    medium_font = raleway_18
-    font_available = True
-    print("✅ Using Raleway fonts")
-except ImportError:
-    # Fall back to terminal font if no custom fonts
-    large_font = terminalio.FONT
-    medium_font = terminalio.FONT
-    font_available = False
-    print(
-        "⚠️ Using terminal font - install fonts with: circup install font_raleway_regular_18 font_raleway_regular_14"
-    )
-
 
 def initialize_display(shared_spi=None):
     """Initialize display with optional shared SPI bus"""
@@ -63,46 +45,27 @@ def create_display_group():
     bg_sprite = displayio.TileGrid(color_bitmap, pixel_shader=color_palette)
     group.append(bg_sprite)
 
-    # Use better fonts if available, otherwise smaller scale with terminal font
-    if font_available:
-        # With custom fonts - no scaling needed
-        ph_label = label.Label(large_font, text="pH: --", color=0xFFFFFF, x=20, y=40)
-        temp_c_label = label.Label(
-            medium_font, text="Temp: --°C", color=0xFFFFFF, x=20, y=80
-        )
-        temp_f_label = label.Label(
-            medium_font, text="Temp: --°F", color=0xFFFFFF, x=20, y=110
-        )
-        rssi_label = label.Label(
-            medium_font, text="WiFi: -- dBm", color=0xFFFFFF, x=20, y=140
-        )
-        time_label = label.Label(medium_font, text="--:--", color=0xFFFFFF, x=20, y=170)
-    else:
-        # With terminal font - use smaller scale for less pixelation
-        ph_label = label.Label(
-            terminalio.FONT, text="pH: --", color=0xFFFFFF, x=20, y=40
-        )
-        ph_label.scale = 2  # Smaller scale = less pixelated
+    # Use terminal font with scale 2 for all labels
+    ph_label = label.Label(terminalio.FONT, text="pH: --", color=0xFFFFFF, x=20, y=40)
+    ph_label.scale = 2
 
-        temp_c_label = label.Label(
-            terminalio.FONT, text="Temp: --°C", color=0xFFFFFF, x=20, y=80
-        )
-        temp_c_label.scale = 2
+    temp_c_label = label.Label(
+        terminalio.FONT, text="Temp: --°C", color=0xFFFFFF, x=20, y=80
+    )
+    temp_c_label.scale = 2
 
-        temp_f_label = label.Label(
-            terminalio.FONT, text="Temp: --°F", color=0xFFFFFF, x=20, y=110
-        )
-        temp_f_label.scale = 2
+    temp_f_label = label.Label(
+        terminalio.FONT, text="Temp: --°F", color=0xFFFFFF, x=20, y=110
+    )
+    temp_f_label.scale = 2
 
-        rssi_label = label.Label(
-            terminalio.FONT, text="WiFi: -- dBm", color=0xFFFFFF, x=20, y=140
-        )
-        rssi_label.scale = 2
+    rssi_label = label.Label(
+        terminalio.FONT, text="WiFi: -- dBm", color=0xFFFFFF, x=20, y=140
+    )
+    rssi_label.scale = 2
 
-        time_label = label.Label(
-            terminalio.FONT, text="--:--", color=0xFFFFFF, x=20, y=170
-        )
-        time_label.scale = 2
+    time_label = label.Label(terminalio.FONT, text="--:--", color=0xFFFFFF, x=20, y=170)
+    time_label.scale = 2
 
     group.append(ph_label)
     group.append(temp_c_label)
