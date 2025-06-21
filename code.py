@@ -147,6 +147,62 @@ if watchdog_enabled:
     wdt.feed()
 print("🐕 Watchdog fed after imports")
 
+# === SAFE SHUTDOWN MONITOR SETUP ===
+print("🔧 Setting up safe shutdown monitor...")
+shutdown_pin = digitalio.DigitalInOut(
+    board.D6
+)  # Change pin if D6 conflicts with your setup
+shutdown_pin.direction = digitalio.Direction.INPUT
+shutdown_pin.pull = digitalio.Pull.UP  # Pin normally HIGH, shutdown when LOW
+print("   Safe shutdown monitor active - ground D6 to shutdown safely")
+
+
+def safe_system_shutdown():
+    """Enhanced shutdown that properly releases display SPI resources"""
+    print("🛑 Safe shutdown initiated...")
+
+    try:
+        # First release displays (this should free display SPI)
+        import displayio
+
+        displayio.release_displays()
+        print("   ✅ Display resources released")
+
+        # Emergency I2C cleanup (your existing function)
+        emergency_i2c_cleanup()
+        print("   ✅ I2C cleaned up")
+
+        # Clean up main SPI bus
+        if "spi" in globals():
+            try:
+                spi.deinit()
+                print("   ✅ Main SPI bus released")
+            except:
+                pass
+
+        # Clean up board SPI if it exists
+        try:
+            if hasattr(board, "SPI"):
+                board.SPI().deinit()
+                print("   ✅ Board SPI released")
+        except:
+            pass
+
+        # Flash LED to confirm safe state
+        led = digitalio.DigitalInOut(board.LED)
+        led.direction = digitalio.Direction.OUTPUT
+        for _ in range(10):
+            led.value = not led.value
+            time.sleep(0.2)
+
+        print("🔋 System halted - SAFE TO DISCONNECT USB")
+        return True
+
+    except Exception as e:
+        print(f"   ⚠️ Shutdown error: {e}")
+        return False
+
+
 # === Setup NeoPixel for status ===
 pixel = neopixel.NeoPixel(board.NEOPIXEL, 1, brightness=0.2)
 pixel[0] = (0, 0, 0)
@@ -310,7 +366,9 @@ last_neopixel_status = None  # Track NeoPixel status changes
 print("🚀 Starting main monitoring loop with robust measurements...")
 
 try:
+
     while state_manager.should_continue():
+
         main_loop_iterations += 1
         now = time.monotonic()
 
@@ -386,7 +444,14 @@ try:
                 measurement_manager,
             )
 
-        time.sleep(0.01)
+        # Fast shutdown check during sleep (checks every 10ms)
+        for _ in range(10):  # 10 checks * 10ms = 100ms total
+            if not shutdown_pin.value:  # Pin pulled LOW = shutdown requested
+                if safe_system_shutdown():
+                    import sys
+
+                    sys.exit()  # Clean exit
+            time.sleep(0.01)  # 10ms per check
 
 except KeyboardInterrupt:
     print("\n🛑 Stopped by user")
