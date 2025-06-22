@@ -27,8 +27,6 @@ def run_sensor_cycle(
     measurement_manager,
 ):
     """Run the main sensor reading and reporting cycle with robust measurements"""
-    current_time_str = time_manager.get_local_time_string()
-    print(f"\n📊 Cycle #{main_loop_iterations} at {current_time_str}")
 
     # Feed watchdog
     state_manager.feed_watchdog()
@@ -224,7 +222,6 @@ def run_sensor_cycle(
         # FIXED: Add measurement source info (no more "unknown")
         sensor_readings["temp_source"] = temp_source
         sensor_readings["ph_source"] = ph_source
-        sensor_readings["meta-dot-timestamp"] = time_manager.get_timestamp_for_data()
 
         # ADD ERROR 32 COUNT: Include Error 32 count in regular publishing
         sensor_readings["error-32-count"] = mqtt_manager.error_32_count

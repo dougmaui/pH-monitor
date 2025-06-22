@@ -335,6 +335,17 @@ connect_and_initialize_services(
     pixel,
 )
 
+try:
+    startup_data = {
+        "ph2-startup-timestamp": time_manager.get_timestamp_for_data(),
+        "startup-info": "System started",
+    }
+    mqtt_manager.send_readings(startup_data)
+    print(f"📅 Startup timestamp published: {time_manager.get_timestamp_for_data()}")
+except Exception as e:
+    print(f"⚠️ Failed to publish startup timestamp: {e}")
+
+
 # Print status reports
 print("System state:", state_manager.get_status())
 print("WiFi status:", wifi_manager.get_status())
@@ -361,6 +372,7 @@ status_report_interval = 60
 last_i2c_health_check = time.monotonic()
 i2c_health_check_interval = 30  # Check I2C health every 30 seconds
 main_loop_iterations = 0
+print(f"🔄 Cycle counter initialized to: {main_loop_iterations}")
 last_neopixel_status = None  # Track NeoPixel status changes
 
 print("🚀 Starting main monitoring loop with robust measurements...")
@@ -369,11 +381,7 @@ try:
 
     while state_manager.should_continue():
 
-        main_loop_iterations += 1
         now = time.monotonic()
-
-        if main_loop_iterations == 1:
-            print("✅ MAIN LOOP STARTED SUCCESSFULLY!")
 
         # === Update all managers ===
         wifi_manager.check_connection()
@@ -393,6 +401,14 @@ try:
         # === Sensor readings (every 2 seconds) ===
         if now - loop_start >= sensor_interval:
             loop_start = now
+            main_loop_iterations += 1
+
+            # Display cycle number and check for first loop
+            current_time_str = time_manager.get_local_time_string()
+            print(f"\n📊 Cycle #{main_loop_iterations} at {current_time_str}")
+
+            if main_loop_iterations == 1:
+                print("✅ MAIN LOOP STARTED SUCCESSFULLY!")
 
             # Run the extracted sensor cycle function with measurement manager
             temp_c, temp_f, ph, rssi, temp_source = run_sensor_cycle(
@@ -415,6 +431,50 @@ try:
                 NOMINAL_HOT_TUB_TEMP_F,
                 measurement_manager,
             )
+
+            # === MQTT Health Status with Failure Counter ===
+            # Initialize failure counter if it doesn't exist
+            if "mqtt_failure_count" not in globals():
+                mqtt_failure_count = 0
+
+            try:
+                mqtt_status_data = {
+                    "ph2-mqtt-status": "healthy",
+                    "mqtt-timestamp": time_manager.get_timestamp_for_data(),
+                    "mqtt-failure-count": mqtt_failure_count,  # Always send current count
+                }
+                sent_status = mqtt_manager.send_readings(mqtt_status_data)
+
+                if sent_status > 0:
+                    # Successfully sent - reset failure counter for next cycle
+                    mqtt_failure_count = 0
+                    print(f"   ✅ MQTT status sent successfully")
+                else:
+                    # Failed to send - increment for next attempt
+                    mqtt_failure_count += 1
+                    print(
+                        f"   ⚠️ MQTT status queued (failure count now: {mqtt_failure_count})"
+                    )
+
+                    if mqtt_failure_count >= 5:
+                        print(
+                            f"🚨 MQTT failed {mqtt_failure_count} times - triggering system reset"
+                        )
+                        state_manager.add_alert(
+                            "MQTT failure threshold reached - resetting", "critical"
+                        )
+                        time.sleep(2)
+                        microcontroller.reset()
+
+            except Exception as e:
+                # Exception occurred - increment counter
+                mqtt_failure_count += 1
+                print(f"   ❌ MQTT status error #{mqtt_failure_count}: {e}")
+
+                if mqtt_failure_count >= 5:
+                    print(f"🚨 MQTT errors reached threshold - triggering system reset")
+                    time.sleep(2)
+                    microcontroller.reset()
 
             # Show I2C stats
             i2c_stats = i2c_safe.get_stats()
