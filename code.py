@@ -504,7 +504,7 @@ try:
                 measurement_manager,
             )
 
-        # Fast shutdown check during sleep (checks every 10ms)
+            # === Fast shutdown check during sleep (checks every 10ms) ===
         for _ in range(10):  # 10 checks * 10ms = 100ms total
             if not shutdown_pin.value:  # Pin pulled LOW = shutdown requested
                 if safe_system_shutdown():
@@ -512,6 +512,10 @@ try:
 
                     sys.exit()  # Clean exit
             time.sleep(0.01)  # 10ms per check
+
+        # === Add pause AFTER fast shutdown check ===
+        print("Get ready...")
+        time.sleep(6)
 
 except KeyboardInterrupt:
     print("\n🛑 Stopped by user")
