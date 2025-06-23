@@ -188,12 +188,29 @@ def safe_system_shutdown():
         except:
             pass
 
-        # Flash LED to confirm safe state
-        led = digitalio.DigitalInOut(board.LED)
-        led.direction = digitalio.Direction.OUTPUT
-        for _ in range(10):
-            led.value = not led.value
-            time.sleep(0.2)
+        # FIXED: Clean up any existing GPIO objects before creating LED
+        try:
+            # Clean up calibration buttons if they exist
+            if "next_pin" in globals():
+                next_pin.deinit()
+            if "abort_pin" in globals():
+                abort_pin.deinit()
+        except:
+            pass
+
+        # SIMPLIFIED: Use only NeoPixel for shutdown confirmation (avoid LED conflict)
+        try:
+            if "pixel" in globals():
+                print("   🔴 Visual shutdown confirmation via NeoPixel...")
+                for _ in range(10):
+                    pixel[0] = (255, 0, 0) if _ % 2 else (0, 0, 0)
+                    time.sleep(0.2)
+                pixel[0] = (0, 0, 0)
+                print("   ✅ Shutdown confirmation complete")
+            else:
+                print("   ⚠️ No visual confirmation available")
+        except Exception as visual_error:
+            print(f"   ⚠️ Visual confirmation failed: {visual_error}")
 
         print("🔋 System halted - SAFE TO DISCONNECT USB")
         return True
@@ -206,6 +223,62 @@ def safe_system_shutdown():
 # === Setup NeoPixel for status ===
 pixel = neopixel.NeoPixel(board.NEOPIXEL, 1, brightness=0.2)
 pixel[0] = (0, 0, 0)
+
+# === CALIBRATION BUTTON DETECTION ===
+print("🔍 Setting up calibration button detection...")
+
+# Setup calibration buttons
+next_pin = digitalio.DigitalInOut(board.D11)  # Next button
+next_pin.direction = digitalio.Direction.INPUT
+next_pin.pull = digitalio.Pull.UP  # Active LOW
+
+abort_pin = digitalio.DigitalInOut(board.D13)  # Abort button
+abort_pin.direction = digitalio.Direction.INPUT
+abort_pin.pull = digitalio.Pull.UP  # Active LOW
+
+print("📌 Calibration buttons configured on D11 (Next) and D13 (Abort)")
+
+# Visual countdown for button detection
+print("🕐 5-second window for calibration mode...")
+print("   Hold BOTH D11 AND D13 buttons now for calibration!")
+
+calibration_requested = False
+
+for countdown in range(5, 0, -1):
+    # Check button states (Active LOW - pressed = False)
+    next_pressed = not next_pin.value
+    abort_pressed = not abort_pin.value
+
+    # Visual feedback via NeoPixel
+    if next_pressed and abort_pressed:
+        pixel[0] = (0, 0, 255)  # BLUE = Both buttons detected
+        calibration_requested = True
+        print(f"   🎯 BOTH BUTTONS DETECTED! Calibration mode in {countdown}s...")
+    elif next_pressed or abort_pressed:
+        pixel[0] = (255, 255, 0)  # YELLOW = One button detected
+        print(f"   ⚠️ Only one button pressed - need both! ({countdown}s)")
+    else:
+        pixel[0] = (255, 0, 255)  # MAGENTA = Countdown active
+        print(f"   ⏰ Waiting for calibration buttons... {countdown}s")
+
+    # Feed watchdog during countdown
+    if watchdog_enabled:
+        wdt.feed()
+
+    time.sleep(1)
+
+# Final result
+if calibration_requested:
+    pixel[0] = (0, 255, 0)  # GREEN = Calibration confirmed
+    print("✅ CALIBRATION MODE CONFIRMED!")
+    print("🎯 TODO: Enter calibration mode here")
+    time.sleep(2)
+    # TODO: Add calibration mode call here
+else:
+    pixel[0] = (0, 0, 0)  # OFF = Normal operation
+    print("✅ Normal operation mode - no calibration requested")
+
+print("🚀 Continuing with system initialization...")
 
 # === Setup I2C and SPI buses ===
 print("🔌 Setting up I2C bus...")
@@ -504,7 +577,7 @@ try:
                 measurement_manager,
             )
 
-        # Fast shutdown check during sleep (checks every 10ms)
+            # === Fast shutdown check during sleep (checks every 10ms) ===
         for _ in range(10):  # 10 checks * 10ms = 100ms total
             if not shutdown_pin.value:  # Pin pulled LOW = shutdown requested
                 if safe_system_shutdown():
@@ -512,6 +585,10 @@ try:
 
                     sys.exit()  # Clean exit
             time.sleep(0.01)  # 10ms per check
+
+        # === Add pause AFTER fast shutdown check ===
+        print("Get ready...")
+        time.sleep(6)
 
 except KeyboardInterrupt:
     print("\n🛑 Stopped by user")
