@@ -39,53 +39,20 @@ except Exception as e:
     print(f"❌ Early watchdog setup failed: {e}")
     watchdog_enabled = False
 
-# === IMMEDIATE BUTTON DETECTION (BEFORE EVERYTHING ELSE!) ===
-print("🔧 EARLY calibration button detection...")
 
-# Setup buttons immediately
-next_pin = digitalio.DigitalInOut(board.D11)
-next_pin.direction = digitalio.Direction.INPUT
-next_pin.pull = digitalio.Pull.UP
-
-abort_pin = digitalio.DigitalInOut(board.D13)
-abort_pin.direction = digitalio.Direction.INPUT
-abort_pin.pull = digitalio.Pull.UP
-
-print("✅ Buttons ready - checking for calibration mode...")
-
-# Extended 5-second detection window
-calibration_requested = False
-buttons_detected = 0
-
-for check in range(50):  # 5 seconds at 0.1s intervals
-    next_pressed = not next_pin.value
-    abort_pressed = not abort_pin.value
-
-    if next_pressed and abort_pressed:
-        buttons_detected += 1
-
-    time.sleep(0.1)
-
-# Decision after 5 seconds
-if buttons_detected >= 30:  # 3+ seconds out of 5
-    calibration_requested = True
-    print("🔵 CALIBRATION MODE DETECTED!")
-    print(f"   Buttons held for {buttons_detected/10:.1f}/5.0 seconds")
-else:
-    calibration_requested = False
-    print("🟢 NORMAL OPERATION MODE")
-    print(f"   Buttons held for {buttons_detected/10:.1f}/5.0 seconds (need 3.0+)")
-
-print(f"📋 Calibration mode: {calibration_requested}")
-print("🚀 Continuing with system boot...")
-
-# Feed watchdog before potentially hanging operations
-if watchdog_enabled:
-    wdt.feed()
-print("🐕 Watchdog fed before I2C operations")
+# === DEFINE FUNCTIONS FIRST (before calibration branch) ===
+def emergency_i2c_cleanup():
+    """Emergency I2C cleanup on errors"""
+    try:
+        print("🚨 Emergency I2C cleanup...")
+        if hasattr(board, "I2C"):
+            board.I2C().deinit()
+            time.sleep(0.5)
+        print("   Emergency cleanup complete")
+    except:
+        pass  # If this fails, we're already in trouble
 
 
-# === I2C RESET FUNCTIONS ===
 def safe_i2c_reset_with_timeout(timeout_seconds=20):  # EXPANDED: was 10s
     """Attempt I2C reset with timeout protection and watchdog feeding"""
     start_time = time.monotonic()
@@ -133,17 +100,15 @@ def safe_i2c_reset_with_timeout(timeout_seconds=20):  # EXPANDED: was 10s
         return False
 
 
-def emergency_i2c_cleanup():
-    """Emergency I2C cleanup on errors"""
-    try:
-        print("🚨 Emergency I2C cleanup...")
-        if hasattr(board, "I2C"):
-            board.I2C().deinit()
-            time.sleep(0.5)
-        print("   Emergency cleanup complete")
-    except:
-        pass  # If this fails, we're already in trouble
+print("🟢 NORMAL MODE - Full system initialization")
 
+# === NORMAL MODE CONTINUES (NO DUPLICATES) ===
+print("🚀 Continuing with system boot...")
+
+# Feed watchdog before potentially hanging operations
+if watchdog_enabled:
+    wdt.feed()
+print("🐕 Watchdog fed before I2C operations")
 
 # Execute protected I2C reset with expanded timeout
 safe_i2c_reset_with_timeout(20)  # EXPANDED: was 10s
@@ -165,7 +130,6 @@ if watchdog_enabled:
 from lib.config.settings import WIFI_SSID, WIFI_PASSWORD, IO_USERNAME, IO_KEY
 from lib.sensors.ph_sensor import AtlasScientificPH
 from lib.sensors.rtd_sensor import RTDSensor
-from lib.calibration.calibration_manager import CalibrationManager
 
 # Feed watchdog during imports
 if watchdog_enabled:
@@ -264,7 +228,6 @@ def safe_system_shutdown():
 # === Setup NeoPixel for status ===
 pixel = neopixel.NeoPixel(board.NEOPIXEL, 1, brightness=0.2)
 pixel[0] = (0, 0, 0)
-
 
 # === Setup I2C and SPI buses ===
 print("🔌 Setting up I2C bus...")
@@ -394,49 +357,7 @@ connect_and_initialize_services(
     pixel,
 )
 
-# === CALIBRATION MODE EXECUTION ===
-if calibration_requested:
-    print("\n🧪 Starting calibration mode...")
-
-    # Create calibration manager
-    calibration_manager = CalibrationManager(
-        ph_sensor=ph_sensor,
-        display=display,
-        ph_label=ph_label,  # ADD THESE
-        temp_c_label=temp_c_label,  # DISPLAY
-        temp_f_label=temp_f_label,  # LABELS
-        rssi_label=rssi_label,  # TO THE
-        time_label=time_label,  # CONSTRUCTOR
-        next_pin=next_pin,
-        abort_pin=abort_pin,
-        safe_read_ph=safe_read_ph,
-        safe_read_temperature=safe_read_temperature,
-        pixel=pixel,
-        watchdog_enabled=watchdog_enabled,
-        wdt=wdt,
-    )
-
-    # Test display update before calibration
-    print("🔍 Testing display update...")
-    ph_label.text = "TEST LINE 1"
-    temp_c_label.text = "TEST LINE 2"
-    temp_f_label.text = "TEST LINE 3"
-    rssi_label.text = "TEST LINE 4"
-    time_label.text = "TEST LINE 5"
-    time.sleep(3)
-    print("🔍 Display test complete")
-
-    # Run calibration
-    calibration_success = calibration_manager.run_calibration()
-
-    if calibration_success:
-        print("🎉 Calibration completed successfully!")
-    else:
-        print("❌ Calibration was cancelled or failed")
-
-    print("🔄 Restarting system for normal operation...")
-    time.sleep(2)
-    microcontroller.reset()
+#
 
 # If we reach here, continue with normal operation
 print("🚀 Continuing with normal monitoring operation...")
@@ -610,7 +531,7 @@ try:
                 measurement_manager,
             )
 
-            # === Fast shutdown check during sleep (checks every 10ms) ===
+        # === Fast shutdown check during sleep (checks every 10ms) ===
         for _ in range(10):  # 10 checks * 10ms = 100ms total
             if not shutdown_pin.value:  # Pin pulled LOW = shutdown requested
                 if safe_system_shutdown():
