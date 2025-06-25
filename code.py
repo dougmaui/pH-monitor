@@ -1,5 +1,6 @@
 # code.py - Production version with TFT display, early watchdog, I2C safety, temperature fallback, and Robust Measurements
 # Rev 3.8 - Cleaned up OneWire dependencies, RTD-only temperature system
+# MINIMAL ADDITION: Calibration button detection at startup
 import time
 import board
 import digitalio
@@ -14,6 +15,84 @@ import os
 import supervisor
 
 supervisor.runtime.autoreload = False
+
+# === CALIBRATION BUTTON DETECTION (FIRST THING - BEFORE WATCHDOG) ===
+print("🔧 HOT TUB MONITORING SYSTEM")
+print("Hold D13+D11 during startup for calibration mode...")
+
+
+def check_calibration_buttons():
+    """Check for calibration mode button combination at startup"""
+    try:
+        next_btn = digitalio.DigitalInOut(board.D13)
+        next_btn.direction = digitalio.Direction.INPUT
+        next_btn.pull = digitalio.Pull.UP
+
+        abort_btn = digitalio.DigitalInOut(board.D11)
+        abort_btn.direction = digitalio.Direction.INPUT
+        abort_btn.pull = digitalio.Pull.UP
+
+        detection_start = time.monotonic()
+        calibration_requested = False
+
+        # Check for 8 seconds (ESP32 boot window)
+        while time.monotonic() - detection_start < 8.0:
+            both_pressed = not next_btn.value and not abort_btn.value
+            if both_pressed:
+                print(f"🎯 CALIBRATION MODE DETECTED!")
+                calibration_requested = True
+                break
+            time.sleep(0.1)
+
+        next_btn.deinit()
+        abort_btn.deinit()
+
+        elapsed = time.monotonic() - detection_start
+        if calibration_requested:
+            print(f"   ✅ Calibration mode will start (detected at {elapsed:.1f}s)")
+        else:
+            print(f"   📊 Normal monitoring mode (checked for {elapsed:.1f}s)")
+
+        return calibration_requested
+
+    except Exception as e:
+        print(f"   ❌ Button detection error: {e}")
+        print("   📊 Continuing with normal monitoring mode")
+        return False
+
+
+# Check for calibration mode at startup
+calibration_mode = check_calibration_buttons()
+
+if calibration_mode:
+    print("🧪 STARTING CALIBRATION MODULE...")
+    print("   📦 Importing calibration system...")
+
+    try:
+        # Import and run the calibration module
+        from lib.calibration.calibration_system import run_calibration_mode
+
+        print("   🚀 Launching calibration interface...")
+        calibration_success = run_calibration_mode()
+
+        if calibration_success:
+            print("   ✅ Calibration completed successfully")
+        else:
+            print("   ⚠️ Calibration ended - continuing to normal monitoring")
+
+    except ImportError as e:
+        print(f"   ❌ Calibration module not found: {e}")
+        print("   📝 Create lib/calibration/calibration_system.py")
+        print("   🔄 Falling back to normal monitoring...")
+
+    except Exception as e:
+        print(f"   ❌ Calibration module error: {e}")
+        print("   🔄 Falling back to normal monitoring...")
+
+# Continue with normal monitoring regardless of calibration outcome
+print("🟢 NORMAL MODE - Full system initialization")
+
+# === REST OF YOUR EXACT WORKING CODE (UNCHANGED) ===
 
 # Import extracted modules
 from lib.core.neopixel_status import (
@@ -100,9 +179,6 @@ def safe_i2c_reset_with_timeout(timeout_seconds=20):  # EXPANDED: was 10s
         return False
 
 
-print("🟢 NORMAL MODE - Full system initialization")
-
-# === NORMAL MODE CONTINUES (NO DUPLICATES) ===
 print("🚀 Continuing with system boot...")
 
 # Feed watchdog before potentially hanging operations
@@ -356,8 +432,6 @@ connect_and_initialize_services(
     safe_read_temperature,
     pixel,
 )
-
-#
 
 # If we reach here, continue with normal operation
 print("🚀 Continuing with normal monitoring operation...")

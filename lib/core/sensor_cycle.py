@@ -186,7 +186,10 @@ def run_sensor_cycle(
                 str(round(temp_f, 1)) if isinstance(temp_f, float) else "--"
             )
             display_rssi = str(int(rssi)) if rssi else "--"
-            display_ph = str(round(ph, 2)) if isinstance(ph, float) else "--"
+            try:
+                display_ph = f"{float(ph):.3f}"
+            except (ValueError, TypeError):
+                display_ph = str(ph) if ph else "--"
 
             # Direct display update (TFT uses SPI, not I2C)
             update_display(
