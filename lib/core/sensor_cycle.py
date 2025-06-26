@@ -27,6 +27,8 @@ def run_sensor_cycle(
     measurement_manager,
 ):
     """Run the main sensor reading and reporting cycle with robust measurements"""
+    current_time_str = time_manager.get_local_time_string()
+    print(f"\n📊 Cycle #{main_loop_iterations} at {current_time_str}")
 
     # Feed watchdog
     state_manager.feed_watchdog()
@@ -179,17 +181,24 @@ def run_sensor_cycle(
             from lib.oled_display.oled_display import update_display
 
             display_time = time_manager.get_local_time_string()
-            display_temp_c = (
-                str(round(temp_c, 1)) if isinstance(temp_c, float) else "--"
-            )
-            display_temp_f = (
-                str(round(temp_f, 1)) if isinstance(temp_f, float) else "--"
-            )
+
+            # FIXED: Safe formatting for display values - check if numeric before formatting
+            if isinstance(temp_c, (int, float)):
+                display_temp_c = str(round(temp_c, 1))
+            else:
+                display_temp_c = "--"
+
+            if isinstance(temp_f, (int, float)):
+                display_temp_f = str(round(temp_f, 1))
+            else:
+                display_temp_f = "--"
+
             display_rssi = str(int(rssi)) if rssi else "--"
-            try:
-                display_ph = f"{float(ph):.3f}"
-            except (ValueError, TypeError):
-                display_ph = str(ph) if ph else "--"
+
+            if isinstance(ph, (int, float)):
+                display_ph = f"{ph:.3f}"
+            else:
+                display_ph = "--"
 
             # Direct display update (TFT uses SPI, not I2C)
             update_display(
@@ -225,6 +234,7 @@ def run_sensor_cycle(
         # FIXED: Add measurement source info (no more "unknown")
         sensor_readings["temp_source"] = temp_source
         sensor_readings["ph_source"] = ph_source
+        sensor_readings["meta-dot-timestamp"] = time_manager.get_timestamp_for_data()
 
         # ADD ERROR 32 COUNT: Include Error 32 count in regular publishing
         sensor_readings["error-32-count"] = mqtt_manager.error_32_count
