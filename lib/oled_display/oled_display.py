@@ -88,7 +88,6 @@ def update_display(
     rssi,
     time_str,
 ):
-    # FIXED: Removed .3f format specifier since ph is already a formatted string
     ph_label.text = f"pH: {ph}" if ph else "pH: --"
     temp_c_label.text = f"Temp: {temp_c}°C" if temp_c else "Temp: --°C"
     temp_f_label.text = f"Temp: {temp_f}°F" if temp_f else "Temp: --°F"
