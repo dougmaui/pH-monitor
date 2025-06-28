@@ -88,7 +88,7 @@ def update_display(
     rssi,
     time_str,
 ):
-    ph_label.text = f"pH: {ph:.3f}" if ph else "pH: --"
+    ph_label.text = f"pH: {ph}" if ph else "pH: --"
     temp_c_label.text = f"Temp: {temp_c}°C" if temp_c else "Temp: --°C"
     temp_f_label.text = f"Temp: {temp_f}°F" if temp_f else "Temp: --°F"
     rssi_label.text = f"WiFi: {rssi} dBm" if rssi else "WiFi: -- dBm"
